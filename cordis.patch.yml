@@ -1,0 +1,15 @@
+# dsh-ollama-think bundle patch — 一行 insert 即挂载 Host 半边。
+#
+# 插件零配置默认工作（启动扫一次 + 监听 ~/.ollama/models 事件后重扫，无定时轮询）。
+# 如需调整，在本文件 config 里改，或在 profile 的 cordis.patch.yml 里加同 id 条目覆盖：
+#
+#   ollamaBaseUrl   探测端点（也用于匹配 llm-pi-ai 路由），默认 http://localhost:11434
+#   ollamaModelsDir 监听目录（pull/rm 事件源），默认 $OLLAMA_MODELS 或 ~/.ollama/models
+#   routeId         直接点名 providers 下的路由键，跳过 baseURL 匹配
+#   settingsNs      被写的配置命名空间，默认 llm-pi-ai
+#   autoAddMissing  是否把 Ollama 里新增的 thinking 模型自动追加进路由列表，默认 true
+#   enabled         false 空转整个插件，默认 true
+- insert:
+    - id: ollama-think
+      name: dsh-ollama-think
+      config: {}

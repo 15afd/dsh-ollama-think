@@ -1,0 +1,38 @@
+{
+  "name": "dsh-ollama-think",
+  "version": "2.0.0",
+  "description": "自动为本地 Ollama 模型补齐推理等级：问 Ollama /api/show 的 capabilities(thinking)，事件驱动（启动扫描 + 监听模型目录，无定时轮询），经设置服务正规写路径写入 reasoningEfforts，热加载生效无需重启。",
+  "keywords": ["dsh", "dsh-plugin", "ollama", "reasoning-effort", "local-model", "deepseek-harness"],
+  "license": "MIT",
+  "type": "module",
+  "main": "index.js",
+  "files": ["index.js", "cordis.patch.yml", "README.md", "LICENSE", "test/e2e.mjs"],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OWNER-REPLACE-ME/dsh-ollama-think.git"
+  },
+  "homepage": "https://github.com/OWNER-REPLACE-ME/dsh-ollama-think#readme",
+  "bugs": {
+    "url": "https://github.com/OWNER-REPLACE-ME/dsh-ollama-think/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    }
+  },
+  "scripts": {
+    "check": "node --check index.js",
+    "test": "node test/e2e.mjs"
+  }
+}
