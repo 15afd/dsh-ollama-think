@@ -35,15 +35,12 @@ dsh 的模型选择器只给声明了 `reasoningEfforts` 的模型显示推理�
 2. 本机跑着 Ollama（默认端口 11434）。若你两者都没有：先按 1 配好路由再装本插件——找不到匹配路由时本插件安静无操作，不会写任何东西。
 
 ```bash
-# 方式 A：从 GitHub 直装（https 形式，不需要配 SSH key）
-dsh plugin --profile desktop add git+https://github.com/<你的用户名>/dsh-ollama-think.git
+# 从 GitHub 直装（https 形式，不需要配 SSH key）
+dsh plugin --profile desktop add git+https://github.com/15afd/dsh-ollama-think.git
 
-#   （已配好 GitHub SSH 的用户也可以用简写：github:<你的用户名>/dsh-ollama-think）
+#   （已配好 GitHub SSH 的用户也可以用简写：github:15afd/dsh-ollama-think）
 
-# 方式 B：发布到 npm 后
-dsh plugin --profile desktop add dsh-ollama-think
-
-# 方式 C：源码本地试用
+# 源码本地试用
 dsh plugin --profile desktop add link:/绝对路径/dsh-ollama-think
 ```
 
@@ -86,8 +83,8 @@ dsh plugin --profile desktop add link:/绝对路径/dsh-ollama-think
 ## 开发
 
 ```bash
-node --check index.js          # 语法
-npm run check
+node --check index.js   # 语法
+node test/e2e.mjs       # 单元 + 端到端（假 Ollama + 宿主桩，自包含）
 ```
 
 核心是纯函数 `computeNextModels(models, facts, autoAddMissing)`（幂等、只增不删），仓库内测试用假 Ollama + 忠实复刻 cordis `ctx.effect` 语义的宿主桩做端到端验证。

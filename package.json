@@ -14,11 +14,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/OWNER-REPLACE-ME/dsh-ollama-think.git"
+    "url": "git+https://github.com/15afd/dsh-ollama-think.git"
   },
-  "homepage": "https://github.com/OWNER-REPLACE-ME/dsh-ollama-think#readme",
+  "homepage": "https://github.com/15afd/dsh-ollama-think#readme",
   "bugs": {
-    "url": "https://github.com/OWNER-REPLACE-ME/dsh-ollama-think/issues"
+    "url": "https://github.com/15afd/dsh-ollama-think/issues"
   },
   "engines": {
     "node": ">=20"
