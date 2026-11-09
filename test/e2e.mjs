@@ -78,6 +78,8 @@ const modelsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ot-models-'))
 const writes = []
 const providers = { ollama: { baseURL: `${baseUrl}/v1`, models: [{ id: 'dumb:c', name: 'dumb:c' }] } }
 let revision = 1
+const handlers = new Map()
+const emit = (name, ...args) => { handlers.get(name)?.(...args) }
 const settingsStub = {
   describe: () => [{ ns: 'llm-pi-ai', revision, value: { providers } }],
   async mutate(ns, ops, expected) {
@@ -85,14 +87,17 @@ const settingsStub = {
     writes.push(ops[0].value.map((m) => m.id))
     providers.ollama.models = structuredClone(ops[0].value)
     revision += 1
+    emit('settings/document-updated', ns) // 真实 settings 服务写后 describe() 会发此事件（回声）
   },
 }
 
 // cordis 语义：effect(execute) 立即运行 execute()；execute 的返回值若是函数，即 disposer。
+// ctx.on 注册监听并返回 disposer（fiber 销毁时宿主自动回收，桩里如实返回）。
 const disposers = []
 const ctx = {
   fiber: { entry: { options: { id: 'ollama-think' } } },
   effect: (execute) => { const dispose = execute(); if (typeof dispose === 'function') disposers.push(dispose) },
+  on: (name, fn) => { handlers.set(name, fn); return () => { if (handlers.get(name) === fn) handlers.delete(name) } },
   inject: (_deps, cb) => { cb({ settings: settingsStub }) },
   logger: { info: () => {}, debug: () => {}, warn: () => {}, error: () => {} },
 }
@@ -108,6 +113,26 @@ tagged = [...tagged, { name: 'thinker:z', modified_at: '3' }]
 fs.writeFileSync(path.join(modelsDir, 'new-model.manifest'), 'x')
 await sleep(3000 + 2000)
 assert.deepEqual(writes.at(-1), ['dumb:c', 'thinker:a', 'thinker:z'], 'pull 事件应自动追加新 thinking 模型')
+
+// 信号 2：经「模型」设置页添加模型——配置变了、模型目录**没有任何文件事件**。
+// 设置页采纳一条新路由模型 = providers 列表多一个无等级条目 + document-updated。
+tagged = [...tagged, { name: 'thinker:y', modified_at: '4' }]
+providers.ollama.models = [...providers.ollama.models, { id: 'thinker:y', name: 'thinker:y' }]
+const writesBeforeSettingsEvent = writes.length
+emit('settings/document-updated', 'llm-pi-ai')
+await sleep(3000 + 2000)
+assert.equal(writes.length, writesBeforeSettingsEvent + 1, 'settings 事件应触发且仅触发一次写入')
+assert.deepEqual(writes.at(-1), ['dumb:c', 'thinker:a', 'thinker:z', 'thinker:y'], '应为设置页新增的条目补上等级')
+// 回声防护：上面那次 mutate 在桩里同步 emit 了 document-updated；1.5s 窗口内
+// 必须被当作自己的回声吞掉，之后不得再有连锁写入（不自激）。
+await sleep(3000 + 1500)
+assert.equal(writes.length, writesBeforeSettingsEvent + 1, '自写回声不得产生后续写入（无自激循环）')
+
+// 其他命名空间的 settings 事件不应触发
+const writesBeforeForeign = writes.length
+emit('settings/document-updated', 'ui-chat')
+await sleep(3000 + 1200)
+assert.equal(writes.length, writesBeforeForeign, '非目标命名空间事件应被忽略')
 
 // 无差异的目录变化不应产生写入
 const writesBeforeNoop = writes.length
@@ -126,7 +151,7 @@ assert.equal(writes.length, writesAfterDispose, 'disposer 运行后事件不得�
 server.close()
 server.closeAllConnections() // 假 Ollama 的 keep-alive 会挂住事件循环，显式断开才能退出
 fs.rmSync(modelsDir, { recursive: true, force: true })
-console.log('  e2e: startup scan / pull event / idempotent / dispose ✓')
+console.log('  e2e: startup scan / pull event / settings-page add / echo guard / foreign ns / idempotent / dispose ✓')
 console.log('OK')
 // undici 的 keep-alive 池会在 server.close() 后继续挂住事件循环数十秒；
 // 所有断言已完成，显式退出让 `npm test` 干净收口。

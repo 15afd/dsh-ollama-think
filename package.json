@@ -1,7 +1,7 @@
 {
   "name": "dsh-ollama-think",
-  "version": "2.0.0",
-  "description": "自动为本地 Ollama 模型补齐推理等级：问 Ollama /api/show 的 capabilities(thinking)，事件驱动（启动扫描 + 监听模型目录，无定时轮询），经设置服务正规写路径写入 reasoningEfforts，热加载生效无需重启。",
+  "version": "2.1.0",
+  "description": "自动为本地 Ollama 模型补齐推理等级：问 Ollama /api/show 的 capabilities(thinking)，事件驱动（启动扫描 + 模型目录文件事件 + 设置页配置变化事件，零定时轮询），经设置服务正规写路径写入 reasoningEfforts，热加载生效无需重启。",
   "keywords": ["dsh", "dsh-plugin", "ollama", "reasoning-effort", "local-model", "deepseek-harness"],
   "license": "MIT",
   "type": "module",

@@ -24,6 +24,7 @@ dsh 的模型选择器只给声明了 `reasoningEfforts` 的模型显示推理�
 |---|---|
 | dsh 启动 | 约 5 秒后扫一次；失败则退避重试（10s/30s/60s/2min/5min 共 5 次，成功即永不再跑）——照顾 Ollama 比 dsh 慢启动的情形 |
 | `ollama pull` / `rm` | `fs.watch` 模型目录（默认 `~/.ollama/models`，尊重 `$OLLAMA_MODELS`），OS 内核投递事件，防抖 3 秒后重扫一次 |
+| 「模型」设置页添加/采纳模型 | 该路径只写配置、不动模型目录，文件 watcher 无感——插件同时监听设置服务的 `document-updated` 事件，防抖 3 秒重扫；带回声窗口，不会自激循环 |
 
 除此之外没有任何定时器、没有任何后台请求。
 

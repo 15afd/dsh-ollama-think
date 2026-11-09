@@ -20,7 +20,10 @@
  *   - 启动后扫一次；若失败（Ollama 还没起来等）做有限次退避重试
  *     （10s/30s/60s/2min/5min，共 5 次），成功一次后永不再跑；
  *   - fs.watch Ollama 模型目录（默认 ~/.ollama/models），pull/rm 引发目录
- *     变化时防抖 3 秒重扫一次。事件由 OS 内核投递，空闲零开销。
+ *     变化时防抖重扫——覆盖"终端里 ollama pull"这条路径；
+ *   - settings/document-updated 事件（llm-pi-ai 命名空间）防抖重扫——覆盖
+ *     "在「模型」设置页发现/添加新模型"这条路径，它只写配置、不动模型目录，
+ *     文件 watcher 对此完全无感。带 1.5s 回声窗口防止自写自触发。
  *
  * 补齐规则（幂等，只增不删）
  * --------------------------
@@ -138,6 +141,7 @@ export default {
     let busy = false
     let watcherClose
     let debounceTimer
+    let lastOwnWrite = 0 // 本插件最近一次真实写配置的时刻（document-updated 回声窗口）
 
     // 卸载/停用时回收监听器。cordis 语义：effect 的函数体立即执行，
     // 其返回的函数才是 disposer——必须 return 出去，写反会让清理当场跑一次。
@@ -155,7 +159,7 @@ export default {
       busy = true
       try {
         const facts = await collectThinkingFacts(cfg.ollamaBaseUrl)
-        if (facts === undefined || facts.size === 0) return false
+        if (facts === undefined) return false // Ollama 不可达；应答成功但零模型是合法状态
         const descriptor = settings.describe({ redactSecrets: true }).find((row) => row.ns === cfg.settingsNs)
         if (!descriptor) return false
         const providers = descriptor.value?.providers
@@ -172,6 +176,9 @@ export default {
         if (!route || routeKey === undefined) return false
         const nextModels = computeNextModels(route.models, facts, cfg.autoAddMissing)
         if (nextModels !== undefined) {
+          // 打戳必须在 mutate **之前**：真实 settings 服务在写路径内部同步 emit
+          // document-updated，若后打戳，自己的回声会漏进窗口再触发一次重扫。
+          lastOwnWrite = Date.now()
           await settings.mutate(cfg.settingsNs, [{ op: 'set', path: ['providers', routeKey, 'models'], value: nextModels }], descriptor.revision)
           ctx.logger.info('ollama-think: reasoningEfforts synced for route "%s" (%d models)', routeKey, nextModels.length)
         }
@@ -184,27 +191,47 @@ export default {
       }
     }
 
-    /** 监听 Ollama 模型目录：pull/rm 触发防抖重扫；watcher 已建则跳过。 */
+    /** 所有外部信号共用一条防抖通道：3 秒合并，busy 期间重复触发只保留最后一次。 */
+    function scheduleRescan(settings) {
+      if (stopped) return
+      clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(() => {
+        scan(settings).then((ok) => {
+          if (!ok) ctx.logger.info('ollama-think: change-triggered scan did not complete; will retry on next change')
+        })
+      }, DEBOUNCE_MS)
+    }
+
+    /** 信号 1：Ollama 模型目录文件事件（pull/rm）。error 必须上报——Windows 上
+    * 监听中的目录被删除/移走只会以 watcher error 表达，吞掉它就等于静默失效。 */
     function watchModelsDir(settings) {
       if (watcherClose !== undefined || stopped) return
       try {
-        watcherClose = watch(cfg.ollamaModelsDir, { recursive: true }, () => {
-          if (stopped) return
-          clearTimeout(debounceTimer)
-          debounceTimer = setTimeout(() => {
-            scan(settings).then((ok) => {
-              if (!ok) ctx.logger.info('ollama-think: change-triggered scan did not complete; will retry on next change')
-            })
-          }, DEBOUNCE_MS)
+        watcherClose = watch(cfg.ollamaModelsDir, { recursive: true }, () => scheduleRescan(settings))
+        watcherClose.on?.('error', (error) => {
+          ctx.logger.info('ollama-think: model-dir watcher failed (%s); relying on settings events', error instanceof Error ? error.message : String(error))
+          watcherClose = undefined
         })
         ctx.logger.debug('ollama-think: watching %s', cfg.ollamaModelsDir)
       } catch (error) {
-        ctx.logger.debug('ollama-think: cannot watch %s (%s)', cfg.ollamaModelsDir, error instanceof Error ? error.message : String(error))
+        ctx.logger.info('ollama-think: cannot watch %s (%s); relying on settings events', cfg.ollamaModelsDir, error instanceof Error ? error.message : String(error))
       }
     }
 
     ctx.inject(['settings'], (child) => {
       const settings = child.settings
+
+      // 信号 2：settingsNs 的配置视图变化——「模型」设置页添加/采纳/编辑路由都走
+      // settings 写路径并发 settings/document-updated，这正是"页面里加新模型"的
+      // 实时信号（模型目录不会有文件事件）。防回声：scan 真实写入后 1.5 秒内
+      // 自己也会 bump revision，窗口内的事件视为回声跳过。
+      // cordis 的 ctx.on 自动随 fiber 回收，无需手动 disposer。
+      ctx.on('settings/document-updated', (ns) => {
+        if (ns !== cfg.settingsNs || stopped) return
+        if (Date.now() - lastOwnWrite < 1500) return
+        scheduleRescan(settings)
+      })
+
       let attempt = 0
       const runStartupScan = () => {
         if (stopped) return
@@ -212,7 +239,7 @@ export default {
           watchModelsDir(settings) // watcher 独立于扫描成败，能建就建
           if (ok) return
           if (attempt >= STARTUP_RETRY_DELAYS_MS.length) {
-            ctx.logger.info('ollama-think: startup scan never succeeded (Ollama unreachable or route not found); relying on model-dir events')
+            ctx.logger.info('ollama-think: startup scan never succeeded (Ollama unreachable or route not found); relying on settings events')
             return
           }
           setTimeout(runStartupScan, STARTUP_RETRY_DELAYS_MS[attempt++])
